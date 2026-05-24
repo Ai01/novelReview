@@ -16,10 +16,3 @@ type User struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
-
-func Migrate() {
-	err := DB.AutoMigrate(&User{})
-	if err != nil {
-		panic("Failed to migrate database: " + err.Error())
-	}
-}

@@ -19,8 +19,15 @@ func LoginHandler(c *gin.Context) {
 		return
 	}
 
+	strongRead := c.GetHeader("X-Read-Consistency") == "strong"
+	db := DBForRead(strongRead)
+	if db == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Database not ready"})
+		return
+	}
+
 	var user User
-	if err := DB.Where("username = ? OR email = ?", req.Username, req.Username).First(&user).Error; err != nil {
+	if err := db.Where("username = ? OR email = ?", req.Username, req.Username).First(&user).Error; err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
 		return
 	}

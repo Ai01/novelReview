@@ -1,0 +1,135 @@
+services:
+  mysql-master:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-novel_db}
+    ports:
+      - "${MYSQL_MASTER_PORT:-33306}:3306"
+    volumes:
+      - mysql_master_data:/var/lib/mysql
+      - ./mysql/master.cnf:/etc/mysql/conf.d/master.cnf:ro
+      - ./mysql:/bootstrap:ro
+    networks:
+      - novelweb
+
+  mysql-replica:
+    image: mysql:8.0
+    restart: unless-stopped
+    depends_on:
+      - mysql-master
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+    ports:
+      - "${MYSQL_REPLICA_PORT:-33307}:3306"
+    volumes:
+      - mysql_replica_data:/var/lib/mysql
+      - ./mysql/replica.cnf:/etc/mysql/conf.d/replica.cnf:ro
+    networks:
+      - novelweb
+
+  backend:
+    build:
+      context: ../backend
+    restart: unless-stopped
+    depends_on:
+      - mysql-master
+      - mysql-replica
+    environment:
+      WRITE_DSN: ${WRITE_DSN:-root:${MYSQL_ROOT_PASSWORD:-rootpassword}@tcp(mysql-master:3306)/${MYSQL_DATABASE:-novel_db}?charset=utf8mb4&parseTime=True&loc=Local}
+      READ_DSN: ${READ_DSN:-root:${MYSQL_ROOT_PASSWORD:-rootpassword}@tcp(mysql-replica:3306)/${MYSQL_DATABASE:-novel_db}?charset=utf8mb4&parseTime=True&loc=Local}
+      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret}
+    ports:
+      - "${BACKEND_PORT:-18080}:8080"
+    networks:
+      - novelweb
+
+  frontend:
+    build:
+      context: ../frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    networks:
+      - novelweb
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "${GATEWAY_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - novelweb
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    restart: unless-stopped
+    ports:
+      - "${PROMETHEUS_PORT:-19090}:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - novelweb
+
+  grafana:
+    image: grafana/grafana:11.5.1
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - loki
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - novelweb
+
+  loki:
+    image: grafana/loki:3.4.2
+    restart: unless-stopped
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    command:
+      - -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    networks:
+      - novelweb
+
+  promtail:
+    image: grafana/promtail:3.4.2
+    restart: unless-stopped
+    depends_on:
+      - loki
+    command:
+      - -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - novelweb
+
+volumes:
+  mysql_master_data:
+  mysql_replica_data:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+
+networks:
+  novelweb:
+    name: novelweb

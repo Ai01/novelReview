@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Lock, Loader2 } from 'lucide-react';
 import axios from 'axios';
@@ -9,6 +9,7 @@ const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -16,7 +17,7 @@ const LoginPage = () => {
     setError('');
 
     try {
-      const response = await axios.post('http://localhost:8080/api/v1/login', {
+      const response = await axios.post(`${apiBaseUrl}/api/v1/login`, {
         username,
         password,
       });

@@ -61,16 +61,10 @@ type ExploreItem struct {
 	CreatedAt string `json:"created_at"`
 }
 
-// ExploreHandler 探索页评论信息流（游标分页）
+// ExploreHandler 探索页评论信息流（按评论时间倒序，游标分页）
 func ExploreHandler(c *gin.Context) {
 	cursorStr := c.DefaultQuery("cursor", "0")
 	limitStr := c.DefaultQuery("limit", "20")
-
-	cursor, err := strconv.Atoi(cursorStr)
-	if err != nil || cursor < 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的游标参数"})
-		return
-	}
 
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil || limit <= 0 {
@@ -88,11 +82,11 @@ func ExploreHandler(c *gin.Context) {
 
 	var comments []Comment
 	query := db.Preload("Book").Preload("User")
-	if cursor > 0 {
-		query = query.Where("id < ?", cursor)
+	if cursorStr != "0" {
+		query = query.Where("created_at < ?", cursorStr)
 	}
 
-	if err := query.Order("id DESC").Limit(limit + 1).Find(&comments).Error; err != nil {
+	if err := query.Order("created_at DESC").Limit(limit + 1).Find(&comments).Error; err != nil {
 		log.Printf("ExploreHandler query error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器内部错误"})
 		return
@@ -115,9 +109,9 @@ func ExploreHandler(c *gin.Context) {
 		}
 	}
 
-	nextCursor := uint(0)
+	nextCursor := "0"
 	if len(items) > 0 {
-		nextCursor = items[len(items)-1].CommentID
+		nextCursor = items[len(items)-1].CreatedAt
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -127,7 +121,7 @@ func ExploreHandler(c *gin.Context) {
 	})
 }
 
-// ExploreSearchHandler 探索页搜索
+// ExploreSearchHandler 探索页搜索（纯 GORM，按评论时间倒序）
 func ExploreSearchHandler(c *gin.Context) {
 	q := c.Query("q")
 	if q == "" {
@@ -137,12 +131,6 @@ func ExploreSearchHandler(c *gin.Context) {
 
 	cursorStr := c.DefaultQuery("cursor", "0")
 	limitStr := c.DefaultQuery("limit", "20")
-
-	cursor, err := strconv.Atoi(cursorStr)
-	if err != nil || cursor < 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的游标参数"})
-		return
-	}
 
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil || limit <= 0 {
@@ -161,15 +149,17 @@ func ExploreSearchHandler(c *gin.Context) {
 	var comments []Comment
 	likePattern := "%" + q + "%"
 
-	query := db.Preload("Book").Preload("User").
-		Joins("JOIN books ON books.id = comments.book_id").
-		Where("books.title LIKE ? OR books.author LIKE ? OR comments.content LIKE ?", likePattern, likePattern, likePattern)
+	// 纯 GORM：使用子查询查找匹配的书籍 ID，不写原始 SQL JOIN
+	bookSubQuery := db.Model(&Book{}).Select("id").Where("title LIKE ? OR author LIKE ?", likePattern, likePattern)
 
-	if cursor > 0 {
-		query = query.Where("comments.id < ?", cursor)
+	query := db.Preload("Book").Preload("User").
+		Where(db.Where("book_id IN (?)", bookSubQuery).Or("content LIKE ?", likePattern))
+
+	if cursorStr != "0" {
+		query = query.Where("created_at < ?", cursorStr)
 	}
 
-	if err := query.Order("comments.id DESC").Limit(limit + 1).Find(&comments).Error; err != nil {
+	if err := query.Order("created_at DESC").Limit(limit + 1).Find(&comments).Error; err != nil {
 		log.Printf("ExploreSearchHandler query error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器内部错误"})
 		return
@@ -192,9 +182,9 @@ func ExploreSearchHandler(c *gin.Context) {
 		}
 	}
 
-	nextCursor := uint(0)
+	nextCursor := "0"
 	if len(items) > 0 {
-		nextCursor = items[len(items)-1].CommentID
+		nextCursor = items[len(items)-1].CreatedAt
 	}
 
 	c.JSON(http.StatusOK, gin.H{

@@ -1,38 +1,34 @@
 ## ADDED Requirements
 
 ### Requirement: Explore feed API
-The system SHALL provide an API endpoint that returns a paginated list of book reviews ordered by most recent.
+The system SHALL provide an API endpoint that returns a paginated list of book reviews ordered by comment creation time descending (newest first).
 
 #### Scenario: Fetch first page of explore feed
 - **WHEN** client sends `GET /api/v1/explore?cursor=0&limit=20`
-- **THEN** the server returns HTTP 200 with `items` array (each containing `comment_id`, `book`, `user`, `content`, `likes`, `created_at`), `next_cursor`, and `has_more`
+- **THEN** the server returns HTTP 200 with `items` array (each containing `comment_id`, `book`, `user`, `content`, `likes`, `created_at`), `next_cursor` (ISO 8601 timestamp string), and `has_more`
 
 #### Scenario: Fetch next page with cursor
-- **WHEN** client sends `GET /api/v1/explore?cursor=20&limit=20`
-- **THEN** the server returns items with `comment_id` > 20, ordered by `created_at` DESC
+- **WHEN** client sends `GET /api/v1/explore?cursor=2026-06-05T08:30:00Z&limit=20`
+- **THEN** the server returns items with `created_at` earlier than the cursor timestamp, ordered by `created_at` DESC
 
 #### Scenario: Last page
 - **WHEN** there are fewer than `limit` items remaining
-- **THEN** the server returns `has_more: false` and `next_cursor` equal to the last item's id
-
-#### Scenario: Invalid cursor
-- **WHEN** client sends a non-numeric or negative cursor value
-- **THEN** the server returns HTTP 400 with error message
+- **THEN** the server returns `has_more: false` and `next_cursor` is `"0"`
 
 #### Scenario: Invalid limit
 - **WHEN** client sends limit > 50 or limit <= 0
 - **THEN** the server clamps limit to 20 (default) and returns HTTP 200
 
 ### Requirement: Explore search API
-The system SHALL provide a search endpoint that filters book reviews by keyword matching book title, author, or review content.
+The system SHALL provide a search endpoint that filters book reviews by keyword matching book title, author, or review content, using pure GORM queries (no raw SQL JOINs).
 
 #### Scenario: Search by book title keyword
 - **WHEN** client sends `GET /api/v1/explore/search?q=三体&cursor=0&limit=20`
-- **THEN** the server returns review items where the book title or author matches "三体", or review content contains "三体"
+- **THEN** the server uses GORM subquery to find matching book IDs, then returns review items where book matches or review content contains "三体", ordered by `created_at` DESC
 
 #### Scenario: Search with pagination
-- **WHEN** client sends `GET /api/v1/explore/search?q=三体&cursor=20&limit=20`
-- **THEN** the server returns the next page of matching results using cursor-based pagination
+- **WHEN** client sends `GET /api/v1/explore/search?q=三体&cursor=2026-06-05T08:30:00Z&limit=20`
+- **THEN** the server returns the next page of matching results using cursor-based pagination (items with `created_at` earlier than cursor)
 
 #### Scenario: Empty search keyword
 - **WHEN** client sends `GET /api/v1/explore/search?q=` (empty query)

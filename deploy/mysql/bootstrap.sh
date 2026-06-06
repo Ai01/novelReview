@@ -9,6 +9,9 @@ MYSQL_REPLICATION_USER="${MYSQL_REPLICATION_USER:-repl}"
 MYSQL_REPLICATION_PASSWORD="${MYSQL_REPLICATION_PASSWORD:-replpassword}"
 MYSQL_BOOTSTRAP_TIMEOUT_SECS="${MYSQL_BOOTSTRAP_TIMEOUT_SECS:-480}"
 DEFAULT_ADMIN_PASSWORD_BCRYPT="${DEFAULT_ADMIN_PASSWORD_BCRYPT:-\$2a\$10\$gVgIiefM5sApmshUBrILUO273tMIW/3UkvubLmYUzh30p2h7ROh.G}"
+APP_DB_USER="${APP_DB_USER:-app}"
+APP_DB_PASSWORD="${APP_DB_PASSWORD:-apppassword}"
+DEFAULT_SEED_PASSWORD_BCRYPT="${DEFAULT_SEED_PASSWORD_BCRYPT:-\$2a\$10\$R.od5/P5da5uTkgEGGVyTOpIfhjWUh9FfyhKn4.uaU35uavM.u8Hq}"
 
 attempts_from_timeout() {
   local secs="$1"
@@ -113,9 +116,15 @@ fi
 echo "[mysql] applying schema and seeding data (on master)..."
 docker compose -f deploy/docker-compose.yml exec -T mysql-master sh -lc "MYSQL_PWD='${MYSQL_ROOT_PASSWORD}' mysql -uroot -e \"CREATE DATABASE IF NOT EXISTS \\\`${MYSQL_DATABASE}\\\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\""
 
+echo "[mysql] ensuring application user..."
+docker compose -f deploy/docker-compose.yml exec -T mysql-master sh -lc "MYSQL_PWD='${MYSQL_ROOT_PASSWORD}' mysql -uroot -e \"CREATE USER IF NOT EXISTS '${APP_DB_USER}'@'%' IDENTIFIED BY '${APP_DB_PASSWORD}'; GRANT ALL PRIVILEGES ON \\\`${MYSQL_DATABASE}\\\`.* TO '${APP_DB_USER}'@'%'; FLUSH PRIVILEGES;\""
+docker compose -f deploy/docker-compose.yml exec -T mysql-replica sh -lc "MYSQL_PWD='${MYSQL_ROOT_PASSWORD}' mysql -uroot -e \"SET GLOBAL super_read_only=0; SET GLOBAL read_only=0; CREATE USER IF NOT EXISTS '${APP_DB_USER}'@'%' IDENTIFIED BY '${APP_DB_PASSWORD}'; GRANT ALL PRIVILEGES ON \\\`${MYSQL_DATABASE}\\\`.* TO '${APP_DB_USER}'@'%'; FLUSH PRIVILEGES;\""
+
 docker compose -f deploy/docker-compose.yml exec -T mysql-master sh -lc "MYSQL_PWD='${MYSQL_ROOT_PASSWORD}' mysql -uroot \"${MYSQL_DATABASE}\" < /bootstrap/schema.sql"
 
 docker compose -f deploy/docker-compose.yml exec -T mysql-master env MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" MYSQL_DATABASE="${MYSQL_DATABASE}" ADMIN_PWD_BCRYPT="${DEFAULT_ADMIN_PASSWORD_BCRYPT}" sh -lc 'mysql -uroot -e "INSERT INTO \`$MYSQL_DATABASE\`.users (username, email, password, avatar, created_at, updated_at) SELECT '\''admin'\'', '\''admin@example.com'\'', '\''$ADMIN_PWD_BCRYPT'\'', '\''https://api.dicebear.com/7.x/avataaars/svg?seed=admin'\'', NOW(), NOW() WHERE NOT EXISTS (SELECT 1 FROM \`$MYSQL_DATABASE\`.users WHERE username='\''admin'\'' LIMIT 1); UPDATE \`$MYSQL_DATABASE\`.users SET password='\''$ADMIN_PWD_BCRYPT'\'' WHERE username='\''admin'\'' AND password NOT LIKE '\''\\$2%'\'';"'
+
+docker compose -f deploy/docker-compose.yml exec -T mysql-master env MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" MYSQL_DATABASE="${MYSQL_DATABASE}" SEED_PWD_BCRYPT="${DEFAULT_SEED_PASSWORD_BCRYPT}" sh -lc 'mysql -uroot "$MYSQL_DATABASE" -e "INSERT INTO users (username, email, password, avatar, created_at, updated_at) SELECT '\''reader01'\'', '\''reader01@novel.com'\'', '\''$SEED_PWD_BCRYPT'\'', '\''https://api.dicebear.com/7.x/avataaars/svg?seed=reader01'\'', NOW(), NOW() WHERE NOT EXISTS (SELECT 1 FROM users WHERE username='\''reader01'\'' OR email='\''reader01@novel.com'\'' LIMIT 1); INSERT INTO users (username, email, password, avatar, created_at, updated_at) SELECT '\''bookworm'\'', '\''bookworm@novel.com'\'', '\''$SEED_PWD_BCRYPT'\'', '\''https://api.dicebear.com/7.x/avataaars/svg?seed=bookworm'\'', NOW(), NOW() WHERE NOT EXISTS (SELECT 1 FROM users WHERE username='\''bookworm'\'' OR email='\''bookworm@novel.com'\'' LIMIT 1); INSERT INTO users (username, email, password, avatar, created_at, updated_at) SELECT '\''小说迷'\'', '\''novelfan@novel.com'\'', '\''$SEED_PWD_BCRYPT'\'', '\''https://api.dicebear.com/7.x/avataaars/svg?seed=novelfan'\'', NOW(), NOW() WHERE NOT EXISTS (SELECT 1 FROM users WHERE username='\''小说迷'\'' OR email='\''novelfan@novel.com'\'' LIMIT 1); INSERT INTO users (username, email, password, avatar, created_at, updated_at) SELECT '\''reading123'\'', '\''reading123@novel.com'\'', '\''$SEED_PWD_BCRYPT'\'', '\''https://api.dicebear.com/7.x/avataaars/svg?seed=reading123'\'', NOW(), NOW() WHERE NOT EXISTS (SELECT 1 FROM users WHERE username='\''reading123'\'' OR email='\''reading123@novel.com'\'' LIMIT 1); INSERT INTO users (username, email, password, avatar, created_at, updated_at) SELECT '\''文学青年'\'', '\''literary@novel.com'\'', '\''$SEED_PWD_BCRYPT'\'', '\''https://api.dicebear.com/7.x/avataaars/svg?seed=literary'\'', NOW(), NOW() WHERE NOT EXISTS (SELECT 1 FROM users WHERE username='\''文学青年'\'' OR email='\''literary@novel.com'\'' LIMIT 1);"'
 
 echo "[mysql] smoke test replication..."
 bash ./deploy/mysql/smoke-test.sh

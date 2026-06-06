@@ -37,8 +37,8 @@ services:
       - mysql-master
       - mysql-replica
     environment:
-      WRITE_DSN: ${WRITE_DSN:-root:${MYSQL_ROOT_PASSWORD:-rootpassword}@tcp(mysql-master:3306)/${MYSQL_DATABASE:-novel_db}?charset=utf8mb4&parseTime=True&loc=Local}
-      READ_DSN: ${READ_DSN:-root:${MYSQL_ROOT_PASSWORD:-rootpassword}@tcp(mysql-replica:3306)/${MYSQL_DATABASE:-novel_db}?charset=utf8mb4&parseTime=True&loc=Local}
+      WRITE_DSN: ${WRITE_DSN:-${APP_DB_USER:-app}:${APP_DB_PASSWORD:-apppassword}@tcp(mysql-master:3306)/${MYSQL_DATABASE:-novel_db}?charset=utf8mb4&parseTime=True&loc=Local}
+      READ_DSN: ${READ_DSN:-${APP_DB_USER:-app}:${APP_DB_PASSWORD:-apppassword}@tcp(mysql-replica:3306)/${MYSQL_DATABASE:-novel_db}?charset=utf8mb4&parseTime=True&loc=Local}
       JWT_SECRET: ${JWT_SECRET:-your_jwt_secret}
     ports:
       - "${BACKEND_PORT:-18080}:8080"

@@ -9,10 +9,48 @@
 - 监控：Prometheus（采集）+ Grafana（可视化）
 - 日志：Loki（存储/查询）+ Promtail（采集）+ Grafana（查询入口）
 
+## 后端架构（MVC + DDD 分层）
+
+后端采用六层分层架构，依赖方向单向：`main → router → handler → service → repository → domain`
+
+```
+backend/
+├── main.go                          # 组装入口（依赖注入，启动服务）
+├── Dockerfile
+├── go.mod / go.sum
+└── internal/
+    ├── domain/                       # 领域模型层（按实体拆分子包，零依赖）
+    │   ├── user/user.go              # User 结构体（GORM 模型）
+    │   ├── book/book.go              # Book 结构体（GORM 模型）
+    │   └── comment/comment.go        # Comment 结构体（关联 User、Book）
+    ├── repository/                   # 数据访问层（纯 GORM，接口+实现）
+    │   ├── user_repo.go              # UserRepository 接口+查询用户
+    │   └── comment_repo.go           # CommentRepository 接口+评论查询/搜索
+    ├── service/                      # 业务逻辑层（编排 repository）
+    │   ├── auth_service.go           # 认证（JWT 签发/校验 + 登录逻辑）
+    │   └── explore_service.go        # 探索页（游标分页 + 搜索）
+    ├── handler/                      # HTTP 处理层（参数解析、响应封装）
+    │   ├── auth_handler.go           # POST /api/v1/login
+    │   └── explore_handler.go        # GET /api/v1/explore, /api/v1/explore/search
+    ├── router/router.go              # 路由集中注册
+    └── infra/database.go             # 基础设施（数据库连接、读写分离）
+```
+
+| 层级 | 职责 | 依赖方向 |
+|------|------|----------|
+| **domain** | GORM 模型，纯数据结构 | 零依赖 |
+| **repository** | 纯 GORM 数据查询，只依赖 domain | domain → |
+| **service** | 业务逻辑编排，依赖 repository 接口 | repository → |
+| **handler** | HTTP 参数解析/校验/响应，依赖 service | service → |
+| **router** | 集中注册路由，依赖 handler | handler → |
+| **main** | 组装入口，依赖注入链 | 以上全部 |
+
+**变更新规则**：新增功能只需在对应层追加文件，不修改已有代码。
+
 ## 目录结构
 
 - deploy/：仓库根目录第一级，部署与运维入口（docker compose、配置、脚本）
-- backend/：后端服务
+- backend/：后端服务（MVC+DDD 分层，internal/ 六层架构）
 - frontend/：前端应用
 
 ## 端口与入口

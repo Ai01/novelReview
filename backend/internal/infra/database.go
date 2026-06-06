@@ -1,4 +1,4 @@
-package main
+package infra
 
 import (
 	"context"
@@ -34,6 +34,7 @@ func normalizeDSN(dsn string) string {
 	return strings.TrimSpace(dsn)
 }
 
+// InitDB 初始化主从数据库连接。
 func InitDB() error {
 	writeDSN := normalizeDSN(os.Getenv("WRITE_DSN"))
 	readDSN := normalizeDSN(os.Getenv("READ_DSN"))
@@ -101,10 +102,12 @@ func connectWithRetries(name string, dsn string, attempts int) (*gorm.DB, func(c
 	return nil, nil, fmt.Errorf("final failure to connect to %s database after retries: %w", name, lastErr)
 }
 
+// DBForWrite 返回写库连接。
 func DBForWrite() *gorm.DB {
 	return writeDB
 }
 
+// DBForRead 返回读库连接；若 strong 为 true 或读库不可用，回退到写库。
 func DBForRead(strong bool) *gorm.DB {
 	if strong {
 		return writeDB
@@ -115,6 +118,7 @@ func DBForRead(strong bool) *gorm.DB {
 	return writeDB
 }
 
+// PingWrite 检查写库连接。
 func PingWrite(ctx context.Context) error {
 	if writePing == nil {
 		return fmt.Errorf("write database not initialized")

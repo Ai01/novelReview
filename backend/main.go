@@ -46,6 +46,8 @@ func main() {
 	api := r.Group("/api/v1")
 	{
 		api.POST("/login", LoginHandler)
+		api.GET("/explore", ExploreHandler)
+		api.GET("/explore/search", ExploreSearchHandler)
 	}
 
 	r.Run(":8080")
